@@ -1,0 +1,10 @@
+node_modules/
+lib/
+debug.log
+.demo/
+.invalid-config.patch.yml
+
+.dist-verify/
+published.tgz
+*.tgz
+

@@ -1,0 +1,115 @@
+{
+  "name": "@ray1270/dsh-task-stack",
+  "version": "0.1.1",
+  "description": "A persistent multi-step task stack for DeepSeek Harness agents: focus_task / focus_complete / read_focus plus a /focus command, with zero automatic prompt injection",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./dev.patch.yml": "./dev.patch.yml"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "dev.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "task-stack",
+    "focus",
+    "agent",
+    "context-compaction"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Ray_lv",
+    "email": "1824676986@qq.com"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/check-build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:store": "node scripts/test-store.mjs",
+    "test:tools": "node scripts/test-tools.mjs",
+    "test:config": "node scripts/test-config.mjs",
+    "test:commands": "node scripts/test-commands.mjs",
+    "test:lifecycle": "node scripts/test-lifecycle.mjs",
+    "demo": "node scripts/demo.mjs",
+    "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
+    "probe": "node scripts/probe-load.mjs",
+    "release-check": "node scripts/release-check.mjs",
+    "prepack": "node scripts/release-check.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || 0.1.7-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/cosmokit": "1.8.5",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-brand": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-invariants": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-ptc-runtime": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox-policy": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-timeout": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-registry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-user-approval": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-util-crypto": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-util-values": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@standard-schema/spec": "1.1.0",
+    "@types/node": "^24.19.0",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ray1270/dsh-task-stack.git"
+  },
+  "homepage": "https://github.com/Ray1270/dsh-task-stack#readme",
+  "bugs": {
+    "url": "https://github.com/Ray1270/dsh-task-stack/issues"
+  }
+}

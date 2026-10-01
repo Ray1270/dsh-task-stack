@@ -1,0 +1,41 @@
+# @ray1270/dsh-task-stack bundle patch: mounts the task-stack plugin into the host
+# composition of a dsh profile. The plugin only contributes three model-callable
+# tools (`focus_task`, `focus_complete`, `read_focus`) to the shared `tools`
+# registry and injects no prompt text, so it is safe to enable globally.
+#
+# Activation:
+#
+#   1. Installed bundle (normal use)
+#      `dsh plugin --profile <name> add <this package|local path>` installs the
+#      package into the profile and reconciles it into that profile's
+#      `dsh.profile.bundles` list. The profile then applies this patch layer, and
+#      the bare package name below resolves from the profile's node_modules.
+#
+#   2. Ad-hoc overlay (development)
+#      `dsh --profile <name> --patch <abs path to dev.patch.yml>` loads the
+#      plugin straight from this source tree with no install step. A bare `name`
+#      resolves from the invocation directory upward (or from the profile), so
+#      it only works once the package is installed or linked; `dev.patch.yml`
+#      uses a path anchored beside the patch file instead.
+#
+# Note that `--patch` belongs to the launcher: `dsh --profile web --patch x.yml`
+# is correct, `dsh web --patch x.yml` is not.
+#
+# Config fields (all optional; Cordis validates them before the plugin starts and
+# refuses the plugin when a value is out of range):
+#   stateDir       directory for one JSON file per session, relative to the
+#                  session workspace            (default .dsh/task-stack)
+#   maxStackDepth  open tasks allowed on the stack; focus_task refuses to push
+#                  past it                       (default 20, minimum 1)
+#   historyLimit   completed tasks kept in history, oldest trimmed first
+#                                                (default 100, minimum 1)
+- insert:
+    # Scoped names MUST be quoted: `@` is a reserved YAML indicator and cannot
+    # open a plain scalar, so `id: @scope/name` is a parse error, not a name.
+    - id: '@ray1270/dsh-task-stack'
+      # Node-resolvable package name — must stay in sync with package.json `name`.
+      name: '@ray1270/dsh-task-stack'
+      config:
+        stateDir: .dsh/task-stack
+        maxStackDepth: 20
+        historyLimit: 100

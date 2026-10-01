@@ -1,0 +1,18 @@
+# Development overlay: identical to cordis.patch.yml except for the plugin
+# anchor. `./lib/index.js` is rewritten by the loader into a file URL beside
+# THIS patch file, so the plugin loads straight from the source tree with no
+# install step and no node_modules lookup:
+#
+#   dsh web --patch <abs path to this file>
+#
+# (A bare `name` instead resolves from the profile's own node_modules, which is
+# the right anchor for an installed bundle — see cordis.patch.yml.)
+- insert:
+    # Quoted for the same reason as cordis.patch.yml: `@` cannot open a plain
+    # YAML scalar.
+    - id: '@ray1270/dsh-task-stack'
+      name: ./lib/index.js
+      config:
+        stateDir: .dsh/task-stack
+        maxStackDepth: 20
+        historyLimit: 100

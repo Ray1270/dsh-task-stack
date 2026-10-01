@@ -1,0 +1,8 @@
+# Normalize line endings to LF in the repository regardless of the platform
+# that checks it out, so a Windows working copy does not rewrite every file.
+* text=auto eol=lf
+
+# Binary assets, should they be added later.
+*.png binary
+*.jpg binary
+*.ico binary
