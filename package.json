@@ -1,6 +1,6 @@
 {
   "name": "@ray1270/dsh-task-stack",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A persistent multi-step task stack for DeepSeek Harness agents: focus_task / focus_complete / read_focus plus a /focus command, with zero automatic prompt injection",
   "type": "module",
   "main": "lib/index.js",
