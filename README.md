@@ -63,19 +63,29 @@ focus_complete("导入命令已加，冒烟测试通过")
 ### 方式 A：作为 profile bundle 安装（常规使用）
 
 ```powershell
-# 本地目录安装（开发时最直接）
-dsh plugin --profile desktop add "D:\dshwork\projects\插件\dsh-task-stack"
-
-# 或从 npm 安装（发布后）
+# 从 npm 安装（推荐）
 dsh plugin --profile desktop add @ray1270/dsh-task-stack
+
+# 或者克隆仓库后按本地目录安装（适合要改源码时）
+git clone https://github.com/Ray1270/dsh-task-stack.git
+cd dsh-task-stack
+dsh plugin --profile desktop add (Get-Location).Path
 ```
 
 `dsh plugin add` 会把包装进 profile 的 `node_modules` 并把它登记进该 profile `package.json` 的 `dsh.profile.bundles`。profile 应用本包自带的 [cordis.patch.yml](cordis.patch.yml)，其中的加载行 `name: @ray1270/dsh-task-stack` 就从 profile 的 `node_modules` 解析。**重启 DSH Desktop 后**新会话即可直接让模型调用这三个工具、使用 `/focus`。
 
-若不想走 pnpm 安装，也可以手工两步（等价，本机现役的 `dsh-light-background` 就是这么装的）：
+若不想走包管理器安装，也可以手工两步（等价）。在**克隆出来的仓库根目录**里执行：
 
-1. `cmd /c mklink /J "%DSH_HOME%\profiles\desktop\node_modules\@ray1270/dsh-task-stack" "D:\dshwork\projects\插件\dsh-task-stack"`
-2. 在 `%DSH_HOME%\profiles\desktop\package.json` 的 `dsh.profile.bundles` 数组里加 `"@ray1270/dsh-task-stack"`
+```powershell
+# 1) 建 junction，让 profile 能按包名解析到这个目录
+$plugin = (Get-Location).Path
+$link   = "$env:DSH_HOME\profiles\desktop\node_modules\@ray1270\dsh-task-stack"
+New-Item -ItemType Directory -Force -Path (Split-Path $link) | Out-Null
+cmd /c mklink /J "$link" "$plugin"
+
+# 2) 编辑 $env:DSH_HOME\profiles\desktop\package.json，
+#    在 dsh.profile.bundles 数组里加一项 "@ray1270/dsh-task-stack"
+```
 
 > 不要写 `"dependencies": { "@ray1270/dsh-task-stack": "link:...." }`：profile 在 C: 而插件在 D:，`path.resolve` 到盘根就停，**多少个 `..` 都跨不了盘**，一条解析不了的 `link:` 会让以后的 `pnpm install` 直接失败。Bundle 靠 profile `node_modules` 里的 junction 解析，不需要依赖项。
 
@@ -83,7 +93,7 @@ dsh plugin --profile desktop add @ray1270/dsh-task-stack
 
 ```powershell
 # 注意 --patch 属于启动器：必须写在 profile 名之前
-dsh --profile web --patch "D:\dshwork\projects\插件\dsh-task-stack\dev.patch.yml" --no-open
+dsh --profile web --patch ".\dev.patch.yml" --no-open
 ```
 
 [dev.patch.yml](dev.patch.yml) 用 `name: ./lib/index.js`，由加载器改写成 patch 文件旁边的 `file://` URL，因此**不需要安装、不需要 node_modules 解析**。`cordis.patch.yml` 用的裸包名只在包已安装（或可被 `node_modules` 解析）时才有效。
@@ -158,7 +168,7 @@ dsh --profile web --patch "D:\dshwork\projects\插件\dsh-task-stack\dev.patch.y
 ## 开发与验证
 
 ```powershell
-cd D:\dshwork\projects\插件\dsh-task-stack
+# 在克隆出来的仓库根目录里执行
 pnpm typecheck        # tsc strict（含 noUncheckedIndexedAccess / exactOptionalPropertyTypes）
 pnpm build            # tsc + 产物自检
 pnpm test             # 69 项：store 22 + tools 18 + config 12 + commands 13 + lifecycle 4 + demo
