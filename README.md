@@ -69,7 +69,7 @@ dsh plugin --profile desktop add @ray1270/dsh-task-stack
 # 或者克隆仓库后按本地目录安装（适合要改源码时）
 git clone https://github.com/Ray1270/dsh-task-stack.git
 cd dsh-task-stack
-dsh plugin --profile desktop add (Get-Location).Path
+dsh plugin --profile desktop add $pwd
 ```
 
 `dsh plugin add` 会把包装进 profile 的 `node_modules` 并把它登记进该 profile `package.json` 的 `dsh.profile.bundles`。profile 应用本包自带的 [cordis.patch.yml](cordis.patch.yml)，其中的加载行 `name: @ray1270/dsh-task-stack` 就从 profile 的 `node_modules` 解析。**重启 DSH Desktop 后**新会话即可直接让模型调用这三个工具、使用 `/focus`。
