@@ -1,5 +1,9 @@
 # @ray1270/dsh-task-stack
 
+[![npm version](https://img.shields.io/npm/v/@ray1270/dsh-task-stack.svg)](https://www.npmjs.com/package/@ray1270/dsh-task-stack)
+[![license](https://img.shields.io/npm/l/@ray1270/dsh-task-stack.svg)](LICENSE)
+[![CI](https://github.com/Ray1270/dsh-task-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/Ray1270/dsh-task-stack/actions/workflows/ci.yml)
+
 给 DeepSeek Harness Agent 用的**可持久化任务栈**：Agent 显式调用三个工具来 push / pop / 查看自己的多步任务焦点，状态以纯文本 JSON 落在会话工作区里。
 
 - **跨上下文压缩存活** —— 状态在磁盘上，压缩掉对话也不丢
@@ -209,16 +213,28 @@ npm publish --access public      # scope 包首次发布必须显式 --access pu
 
 ```
 dsh-task-stack/
-├── package.json          # dsh.bundle 声明；peerDependencies 声明宿主依赖
-├── cordis.patch.yml      # bundle 加载行（裸包名，随安装生效）
-├── dev.patch.yml         # 免安装 overlay（./lib/index.js，随 --patch 生效）
+├── package.json              # dsh.bundle 声明；peerDependencies 声明宿主依赖
+├── cordis.patch.yml          # bundle 加载行（包名，随安装生效）
+├── dev.patch.yml             # 免安装 overlay（./lib/index.js，随 --patch 生效）
 ├── tsconfig.json
+├── LICENSE                   # MIT
+├── .github/workflows/ci.yml  # 每次 push 跑同一个发布闸门
 ├── src/
-│   ├── index.ts          # 插件入口：name / inject / Config / apply
-│   ├── tools.ts          # 三个 defineTool：描述、schema、渲染、执行
-│   ├── store.ts          # 路径解析 + 原子写入 + per-file 锁 + 容错读取
-│   └── types.ts          # 共享类型与默认值
-└── scripts/              # 四套测试 + 产物自检 + 无宿主 probe
+│   ├── index.ts              # 插件入口：name / inject / Config / apply
+│   ├── tools.ts              # 三个 defineTool：描述、schema、渲染、执行
+│   ├── commands.ts           # /focus 斜杠命令
+│   ├── store.ts              # 路径解析 + 原子写入 + per-file 锁 + 容错读取
+│   └── types.ts              # 共享类型与默认值
+└── scripts/
+    ├── release-check.mjs     # 发布闸门：10 步顺序执行（CI 与 prepack 共用）
+    ├── test-store.mjs        # 状态层 22 项
+    ├── test-tools.mjs        # 工具层 18 项
+    ├── test-config.mjs       # 配置与边界 12 项
+    ├── test-commands.mjs     # /focus 13 项
+    ├── test-lifecycle.mjs    # 真实 ToolRuntime 卸载/重载 4 项
+    ├── probe-load.mjs        # 无宿主装载 + 全生命周期实跑
+    ├── demo.mjs              # 可读演示
+    └── check-build.mjs       # 构建产物自检
 ```
 
 ## 许可
