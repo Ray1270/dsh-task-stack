@@ -1,6 +1,6 @@
 {
   "name": "@ray1270/dsh-task-stack",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "A persistent multi-step task stack for DeepSeek Harness agents: focus_task / focus_complete / read_focus plus a /focus command, with zero automatic prompt injection",
   "type": "module",
   "main": "lib/index.js",
@@ -46,9 +46,10 @@
     "test:tools": "node scripts/test-tools.mjs",
     "test:config": "node scripts/test-config.mjs",
     "test:commands": "node scripts/test-commands.mjs",
+    "test:http": "node scripts/test-http.mjs",
     "test:lifecycle": "node scripts/test-lifecycle.mjs",
     "demo": "node scripts/demo.mjs",
-    "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
+    "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-http.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
     "probe": "node scripts/probe-load.mjs",
     "release-check": "node scripts/release-check.mjs",
     "prepack": "node scripts/release-check.mjs"
@@ -84,6 +85,7 @@
     "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
     "@deepseek-ai/dsh-brand": "0.2.0-rc.2",
     "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
     "@deepseek-ai/dsh-invariants": "0.2.0-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-ptc-runtime": "0.2.0-rc.2",

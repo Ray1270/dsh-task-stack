@@ -102,6 +102,58 @@ dsh --profile web --patch ".\dev.patch.yml" --no-open
 > - `dsh web --patch x.yml` 是错的（`web` 子命令不认识 `--patch`），要写 `dsh --profile web --patch x.yml`。
 > - patch 行里的相对目录（`name: ./`）也不行：Node 对目录 URL 抛 `ERR_UNSUPPORTED_DIR_IMPORT`，且 `file:` 说明符不走 `exports`。
 
+## HTTP 快照端点（Web 侧栏数据面）
+
+在 **Web 组合**（`dsh --profile web`）里，插件会额外注册一个只读端点，供 GUI 面板读取任务栈：
+
+```
+GET /api/dsh-task-stack/snapshot?sessionId=<id>&cwd=<绝对路径>
+```
+
+返回：
+
+```json
+{
+  "sessionId": "session-…",
+  "cwd": "D:\\…",
+  "depth": 2,
+  "top": { "id": "task-…", "description": "…", "status": "active", "createdAt": "…" },
+  "stack": [ /* 最深在前，栈顶在最后 */ ],
+  "history": [ /* 最旧在前 */ ],
+  "warnings": []
+}
+```
+
+行为约定：
+
+| 情况 | 响应 |
+|---|---|
+| 正常 | `200` + JSON，`cache-control: no-store` |
+| 未认证（无浏览器 cookie）/ Host 不在信任范围 | `401` / `403` |
+| 组合里没有 `connection` 服务（无法鉴权） | `503`，**失败关闭**而不是无鉴权放行 |
+| 缺 `sessionId`、`cwd` 非绝对路径 | `400` |
+| 非 `GET`/`HEAD` | `405` + `Allow` |
+| 会话没有状态文件 | `200`，`depth: 0` 的空栈（不是 404） |
+
+三点实现说明：
+
+- **它不继承栅栏。** raw WebServer 路由不吃 `connection` 的鉴权，所以端点自己调 `connection.requestRejection(req)`——与第一方 API 同一道 Host/Origin + 浏览器 cookie 校验。**这条路径实测过**：带 cookie 200、匿名 401。
+- **只读。** 端点只暴露 `getSnapshot`；关闭任务仍走 `focus_complete` 或 `/focus`。写入面需要单独的安全设计，不在本版本内。
+- **可选激活。** `webServer` / `connection` 都不写进 `inject`（终端与 headless 组合没有它们，硬依赖会让插件整个 pending），而是用 `ctx.inject(['webServer'], …)` **等服务出现**后再注册；`connection` 在**每次请求时**解析——两者都 `inject: [webRuntime]`，激活顺序不定，捕获一次会把 `undefined` 存下来（这个 bug 我踩过，表现为端点一直 503）。
+
+手动验证（宿主起来后）：
+
+```powershell
+# 1) 用启动时打印的 URL 换浏览器 cookie（303 + Set-Cookie）
+curl.exe -i "http://127.0.0.1:3080/?token=<token>"
+
+# 2) 带 cookie 请求快照
+curl.exe "http://127.0.0.1:3080/api/dsh-task-stack/snapshot?sessionId=<id>&cwd=D%3A%5Cpath" -H "Cookie: dsh-auth-…=…"
+
+# 3) 不带 cookie 必须被拒
+curl.exe -i "http://127.0.0.1:3080/api/dsh-task-stack/snapshot?sessionId=<id>"
+```
+
 ## 配置
 
 在 profile patch 层的该行 `config:` 下配置，全部可选；Cordis 会在插件启动**之前**校验，越界直接拒绝加载该插件并在启动日志里指出字段（不会静默夹紧成另一个策略）。

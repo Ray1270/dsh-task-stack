@@ -21,6 +21,7 @@ import z from '@deepseek-ai/schemastery'
 import { Store } from './store.ts'
 import { registerFocusTools } from './tools.ts'
 import { registerFocusCommand } from './commands.ts'
+import { registerSnapshotRoute, type ComplianceGate, type WebRouteHost } from './http.ts'
 import { resolveConfig, type PluginConfig } from './types.ts'
 
 /**
@@ -101,7 +102,13 @@ export function apply(ctx: Context, config: PluginConfig): void {
   ctx.effect(() => {
     const disposeTools = registerFocusTools(ctx, store)
     const disposeCommand = registerFocusCommand(ctx, store)
+    // The HTTP surface is optional: `webServer` and `connection` exist in the Web
+    // composition but not in a terminal or headless one. They are read with
+    // `ctx.get` rather than declared in `inject`, because a missing optional
+    // service must not stop the tools from loading.
+    const disposeRoute = registerOptionalHttpSurface(ctx, store, logger)
     return () => {
+      disposeRoute?.()
       disposeCommand()
       disposeTools()
       // The lock map is plugin state, not a Cordis registration; releasing it
@@ -133,4 +140,56 @@ export function apply(ctx: Context, config: PluginConfig): void {
     '%s',
     `loaded — focus_task/focus_complete/read_focus + /focus registered; stateDir=${resolved.stateDir} maxStackDepth=${resolved.maxStackDepth} historyLimit=${resolved.historyLimit} statePruneDays=${resolved.statePruneDays}`,
   )
+}
+
+/**
+ * Register the read-only snapshot endpoint once this composition has an HTTP
+ * surface.
+ *
+ * Both services are optional and are therefore NOT declared in {@link inject}:
+ * a terminal or headless profile has no `webServer`, and requiring it would leave
+ * the whole plugin pending (no tools, no `/focus`).
+ *
+ * They must be **waited for**, not read once. In the shipped Web profile the
+ * `webserver` row itself injects `webStartup`, so it activates after a plugin row
+ * that only needs `tools`. Reading `ctx.get('webServer')` during `apply` returned
+ * `undefined` there, and the endpoint silently never registered — which is exactly
+ * what `ctx.inject` exists to avoid.
+ *
+ * A missing `connection` still registers the route, which then answers 503: the
+ * data plane stays fail-closed rather than silently unauthenticated.
+ *
+ * @param ctx - plugin context, possibly carrying `webServer` and `connection`.
+ * @param store - the plugin's store.
+ * @param logger - plugin logger.
+ * @returns a disposer reserving the route slot, if one is registered later.
+ */
+function registerOptionalHttpSurface(
+  ctx: Context,
+  store: Store,
+  logger: { info: (format: unknown, ...params: unknown[]) => void; warn: (format: unknown, ...params: unknown[]) => void },
+): () => void {
+  let disposeRoute: (() => void) | undefined
+  let dropped = false
+
+  ctx.inject(['webServer'], (injected: Context) => {
+    if (dropped) return
+    const host = injected.get('webServer' as never) as WebRouteHost | undefined
+    if (host === undefined) return
+    // The fence is resolved per REQUEST, not here: `connection` may not exist yet
+    // (both rows inject `webRuntime`, so their order is not guaranteed) and a
+    // captured reference would also go stale across a `connection` reload.
+    disposeRoute = registerSnapshotRoute(
+      host,
+      store,
+      () => ctx.get('connection' as never) as ComplianceGate | undefined,
+      logger,
+    )
+  })
+
+  return () => {
+    dropped = true
+    disposeRoute?.()
+    disposeRoute = undefined
+  }
 }

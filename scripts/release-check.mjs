@@ -45,6 +45,7 @@ const steps = [
   { name: 'test:tools', command: process.execPath, args: ['scripts/test-tools.mjs'] },
   { name: 'test:config', command: process.execPath, args: ['scripts/test-config.mjs'] },
   { name: 'test:commands', command: process.execPath, args: ['scripts/test-commands.mjs'] },
+  { name: 'test:http', command: process.execPath, args: ['scripts/test-http.mjs'] },
   { name: 'test:lifecycle', command: process.execPath, args: ['scripts/test-lifecycle.mjs'] },
   { name: 'demo', command: process.execPath, args: ['scripts/demo.mjs'] },
 ]
