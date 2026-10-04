@@ -13,14 +13,16 @@
 # Required secret: NPM_TOKEN — an npm Access Token with publish rights for this
 # package, stored as a repository secret (Settings → Secrets and variables →
 # Actions). Fine-grained tokens cannot publish yet, so this must be an Automation
-# or Publish token.
+# or Publish token, and it must have 2FA bypass enabled.
 name: Release
 
 on:
   push:
     tags: ['v*']
-  # Lets a failed release be retried without deleting and re-pushing the tag. All
-  # steps below are idempotent, so a retry is safe.
+  # Validates the pipeline without publishing: a branch ref makes
+  # publish-release.mjs report the credential state and exit 0, and the Release
+  # step below is guarded to real version tags only. Retrying a failed *tag* run is
+  # also safe, because every step is idempotent.
   workflow_dispatch:
 
 # `contents: write` is needed to create the Release. It is granted to this workflow
@@ -64,6 +66,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create the GitHub Release
+        # Only a real version tag may open a Release. Without this guard the
+        # manual validation run would ask action-gh-release for tag `main`, which
+        # does not exist, and the action *creates* it — one dispatch produced a
+        # stray `main` release and tag that then had to be deleted by hand.
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
