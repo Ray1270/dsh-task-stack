@@ -64,6 +64,16 @@ const existing = spawnSync('npm', ['view', `${name}@${version}`, 'version'], {
 })
 const published = existing.status === 0 && existing.stdout.trim() === version
 
+if (!published && !dryRun && (process.env.NODE_AUTH_TOKEN ?? '').trim() === '' && !hasNpmCredential()) {
+  // A missing secret is a configuration mistake with a confusing symptom (a bare
+  // 401 from the registry), so name it. Local runs may instead have a token in
+  // ~/.npmrc, which `npm whoami` would confirm; do not demand the env var there.
+  process.stderr.write(
+    'publish-release: no npm credential found. Set the NPM_TOKEN repository secret (Settings -> Secrets and variables -> Actions) to the value of an npm Automation or Publish token.\n',
+  )
+  process.exit(1)
+}
+
 if (!published) {
   process.stdout.write(`publish-release: running the release gate and publishing\n`)
   if (dryRun) {
@@ -117,4 +127,19 @@ function mostRecentTag() {
     .map((line) => line.trim())
     .filter((line) => /^v\d/u.test(line))
   return tags[0]
+}
+
+/**
+ * Whether a local npm credential exists, so a developer machine with a token in
+ * `~/.npmrc` is not blocked by the CI-oriented env-var check.
+ *
+ * @returns true when `npm whoami` can identify a user.
+ */
+function hasNpmCredential() {
+  const whoami = spawnSync('npm', ['whoami'], {
+    cwd: here,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  })
+  return whoami.status === 0 && whoami.stdout.trim() !== ''
 }
