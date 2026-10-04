@@ -1,0 +1,75 @@
+# Release automation: pushing a `v*` tag publishes to npm and opens a GitHub
+# Release.
+#
+# The publish path is `scripts/publish-release.mjs`, which is also runnable locally
+# (`node scripts/publish-release.mjs --dry-run`), so what CI does is reviewable and
+# testable without pushing a tag. It refuses a tag that disagrees with
+# `package.json`, and treats an already-published version as success — so a re-run
+# converges instead of failing. That idempotence is deliberate: a publish that
+# half-succeeds (the registry records the version, the client sees an error) makes
+# the version number permanently unusable, which is what happened to 0.2.0 before
+# this workflow existed.
+#
+# Required secret: NPM_TOKEN — an npm Access Token with publish rights for this
+# package, stored as a repository secret (Settings → Secrets and variables →
+# Actions). Fine-grained tokens cannot publish yet, so this must be an Automation
+# or Publish token.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  # Lets a failed release be retried without deleting and re-pushing the tag. All
+  # steps below are idempotent, so a retry is safe.
+  workflow_dispatch:
+
+# `contents: write` is needed to create the Release. It is granted to this workflow
+# file only, and fork pull requests never run it (tag pushes cannot come from a
+# fork).
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: publish to npm and release
+    # Ubuntu, not Windows: this job needs no platform-specific behaviour, and the
+    # gate itself is already verified on both runners in CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `publish-release.mjs` reads the tag on HEAD when it is not given one.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          # Writes the registry auth into .npmrc for `npm publish`.
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dev dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The script runs `npm publish`, whose `prepack` is the full release gate
+      # (11 steps: typecheck, build, artifact check, probe, five suites, the HTTP
+      # surface suite, lifecycle, demo). Nothing is published if it fails.
+      - name: Publish
+        run: node scripts/publish-release.mjs --tag "$GITHUB_REF_NAME"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          # The tarball `scripts/publish-release.mjs` packed (npm's own filename,
+          # e.g. ray1270-dsh-task-stack-0.2.0.tgz), so a release page can be checked
+          # against the registry without downloading from npm.
+          files: '*.tgz'

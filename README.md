@@ -296,7 +296,37 @@ dsh-task-stack/
     ├── test-lifecycle.mjs    # 真实 ToolRuntime 卸载/重载 4 项
     ├── probe-load.mjs        # 无宿主装载 + 全生命周期实跑
     ├── demo.mjs              # 可读演示
-    └── check-build.mjs       # 构建产物自检
+    ├── check-build.mjs       # 构建产物自检
+    └── publish-release.mjs   # tag → 发布（可本地干跑）
+```
+
+## 发布流程
+
+推一个 `v*` tag 就会自动发布到 npm 并建 GitHub Release（[.github/workflows/release.yml](.github/workflows/release.yml)）：
+
+```powershell
+# 1) 升版本（改 package.json 的 version），确认闸门全绿
+pnpm release-check
+
+# 2) 提交并推 tag —— 这一步触发自动化，之后无需手工操作
+git commit -am "chore: release 0.3.0"
+git tag -a v0.3.0 -m "v0.3.0"
+git push && git push origin v0.3.0
+```
+
+自动化做四件事：装依赖 → `node scripts/publish-release.mjs --tag $GITHUB_REF_NAME`（内部跑 `npm publish`，其 `prepack` 就是那套发布闸门）→ 产出 tarball → 建 Release 并附上该 tarball。
+
+**需要一次配置**：在仓库 **Settings → Secrets and variables → Actions** 加一个 `NPM_TOKEN`（npm 的 **Automation** 或 **Publish** token；fine-grained token 目前还不能发布）。
+
+两个刻意的设计，都是被事故逼出来的：
+
+- **tag 必须与 `package.json` 的版本一致**，否则直接失败。不一致意味着会用错误的版本号发布内容，那是发布事故而不是可以抹平的小事。
+- **已发布过的版本视为成功**，而不是报错。因为"registry 已记录版本、客户端却收到失败响应"会让这个版本号**永久不可用**（0.2.0 就是这么丢的）——所以重试必须能收敛。
+
+可以本地干跑看 CI 会做什么：
+
+```powershell
+node scripts/publish-release.mjs --dry-run
 ```
 
 ## 许可

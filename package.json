@@ -52,6 +52,7 @@
     "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-http.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
     "probe": "node scripts/probe-load.mjs",
     "release-check": "node scripts/release-check.mjs",
+    "publish-release": "node scripts/publish-release.mjs",
     "prepack": "node scripts/release-check.mjs"
   },
   "dsh": {
