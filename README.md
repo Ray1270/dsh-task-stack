@@ -316,17 +316,30 @@ git push && git push origin v0.3.0
 
 自动化做四件事：装依赖 → `node scripts/publish-release.mjs --tag $GITHUB_REF_NAME`（内部跑 `npm publish`，其 `prepack` 就是那套发布闸门）→ 产出 tarball → 建 Release 并附上该 tarball。
 
-**需要一次配置**：在仓库 **Settings → Secrets and variables → Actions** 加一个 `NPM_TOKEN`（npm 的 **Automation** 或 **Publish** token；fine-grained token 目前还不能发布）。
+**需要一次配置**：在仓库 **Settings → Secrets and variables → Actions** 加一个 `NPM_TOKEN`（npm 的 **Automation** 或 **Publish** token，且必须勾选 **Bypass 2FA**；fine-grained token 目前还不能发布）。
 
-两个刻意的设计，都是被事故逼出来的：
+### 三种 ref 的三种行为
 
-- **tag 必须与 `package.json` 的版本一致**，否则直接失败。不一致意味着会用错误的版本号发布内容，那是发布事故而不是可以抹平的小事。
-- **已发布过的版本视为成功**，而不是报错。因为"registry 已记录版本、客户端却收到失败响应"会让这个版本号**永久不可用**（0.2.0 就是这么丢的）——所以重试必须能收敛。
+脚本按 ref 判断意图，因为 `workflow_dispatch` 拿到的 `GITHUB_REF_NAME` 是**分支名**而不是 tag：
+
+| 触发 | ref | 行为 |
+| --- | --- | --- |
+| 推 `v0.3.0` tag | `v0.3.0` | 校验 tag == `package.json` 版本 → 发布 |
+| Actions 页面手动 **Run workflow** | `main` | **校验模式**：报告凭据状态、不发布、成功结束 |
+| 普通分支 push | 分支名 | 同上（CI 工作流才是分支上的主验证） |
+
+推真实 tag 但**与 `package.json` 版本不符**时仍然**直接失败**——用错版本号发布会污染 npm，那是事故而不是可以抹平的小事。
+
+### 两个刻意的设计，都是被事故逼出来的
+
+- **tag 必须与 `package.json` 的版本一致**，否则失败。
+- **已发布过的版本视为成功**，而不是报错。因为"registry 已记录版本、客户端却收到失败响应"会让这个版本号**永久不可用**（0.2.0 就是这么丢的：重试同一个版本号只会得到 409）——所以重试必须能收敛。
 
 可以本地干跑看 CI 会做什么：
 
 ```powershell
-node scripts/publish-release.mjs --dry-run
+node scripts/publish-release.mjs --dry-run        # 只决策，不发布
+node scripts/publish-release.mjs --tag main       # 校验模式（等同手动触发）
 ```
 
 ## 许可

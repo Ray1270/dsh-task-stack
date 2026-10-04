@@ -39,10 +39,25 @@ const name = pkg.name
 const version = pkg.version
 
 // CI passes the tag; locally, the most recent tag on HEAD is the intent.
-const tag = argument('tag') ?? mostRecentTag()
+const given = argument('tag')
+const tag = given ?? mostRecentTag()
+
 if (tag === undefined) {
   // Not a release run: a branch build should never publish.
   process.stdout.write('publish-release: no tag given and HEAD is untagged; nothing to publish\n')
+  process.exit(0)
+}
+
+// A branch ref means this is a manual `workflow_dispatch` run, whose whole point
+// is to validate the pipeline. `GITHUB_REF_NAME` is then the branch name, which can
+// never match a release tag — failing on it would make the documented validation
+// entry point always red, so a non-tag ref is a validation run instead. A real tag
+// that disagrees with the version still fails, because publishing content under the
+// wrong number is a release accident, not something to paper over.
+const isVersionTag = /^v\d/u.test(tag)
+if (!isVersionTag) {
+  process.stdout.write(`publish-release: ref ${tag} is not a v* tag; validating without publishing\n`)
+  reportCredential()
   process.exit(0)
 }
 
@@ -64,10 +79,9 @@ const existing = spawnSync('npm', ['view', `${name}@${version}`, 'version'], {
 })
 const published = existing.status === 0 && existing.stdout.trim() === version
 
-if (!published && !dryRun && (process.env.NODE_AUTH_TOKEN ?? '').trim() === '' && !hasNpmCredential()) {
+if (!published && !dryRun && !hasCredential()) {
   // A missing secret is a configuration mistake with a confusing symptom (a bare
-  // 401 from the registry), so name it. Local runs may instead have a token in
-  // ~/.npmrc, which `npm whoami` would confirm; do not demand the env var there.
+  // 401 from the registry), so name it.
   process.stderr.write(
     'publish-release: no npm credential found. Set the NPM_TOKEN repository secret (Settings -> Secrets and variables -> Actions) to the value of an npm Automation or Publish token.\n',
   )
@@ -130,16 +144,34 @@ function mostRecentTag() {
 }
 
 /**
- * Whether a local npm credential exists, so a developer machine with a token in
- * `~/.npmrc` is not blocked by the CI-oriented env-var check.
+ * Whether the environment holds an npm credential.
  *
- * @returns true when `npm whoami` can identify a user.
+ * `NODE_AUTH_TOKEN` is what `actions/setup-node` uses; a developer machine may
+ * instead have a token in `~/.npmrc`, which `npm whoami` confirms. Checking both
+ * keeps the CI-oriented guard from blocking a local run.
+ *
+ * @returns true when a credential appears to be available.
  */
-function hasNpmCredential() {
+function hasCredential() {
+  if ((process.env.NODE_AUTH_TOKEN ?? '').trim() !== '') return true
   const whoami = spawnSync('npm', ['whoami'], {
     cwd: here,
     encoding: 'utf8',
     shell: process.platform === 'win32',
   })
   return whoami.status === 0 && whoami.stdout.trim() !== ''
+}
+
+/** Report credential availability without deciding anything. */
+function reportCredential() {
+  const fromEnv = (process.env.NODE_AUTH_TOKEN ?? '').trim() !== ''
+  const available = hasCredential()
+  process.stdout.write(
+    `publish-release: NODE_AUTH_TOKEN ${fromEnv ? 'is set' : 'is empty'}; npm credential ${available ? 'available' : 'NOT available'}\n`,
+  )
+  if (!available) {
+    process.stderr.write(
+      'publish-release: no npm credential found. Set the NPM_TOKEN repository secret (Settings -> Secrets and variables -> Actions) to the value of an npm Automation or Publish token.\n',
+    )
+  }
 }
