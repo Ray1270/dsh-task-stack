@@ -10,9 +10,14 @@
  *   3. `apply` routes both registrations through `slots.inject`, so a shell that
  *      never declares a seat leaves the panel absent instead of breaking boot;
  *   4. the sidebar row and the page share one id, which is what makes clicking the
- *      row open that page.
+ *      row open that page;
+ *   5. the page splits a wire document into one active row and the *other* frames as
+ *      paused — the document carries `top` as a second view object of the same
+ *      frame, so an identity comparison would list the active task twice.
  *
- * Rendering itself is checked by looking at the panel in the running GUI.
+ * Only the panel's static render is checked here (the stub React above supplies the
+ * snapshot through `useState`); the live polling path is checked by looking at the
+ * panel in the running GUI.
  *
  * Usage: `node scripts/test-client.mjs` (after `pnpm build`).
  */
@@ -34,8 +39,29 @@ const check = (label, fn) => {
 
 process.stdout.write('client bundle tests\n')
 
+/** Flatten a rendered element tree into its text, in document order. */
+function textOf(node) {
+  const out = []
+  const walk = (current) => {
+    if (current === null || current === undefined || typeof current === 'boolean') return
+    if (Array.isArray(current)) {
+      for (const child of current) walk(child)
+      return
+    }
+    if (typeof current === 'string' || typeof current === 'number') {
+      out.push(String(current))
+      return
+    }
+    if (typeof current === 'object' && Array.isArray(current.children)) {
+      for (const child of current.children) walk(child)
+    }
+  }
+  walk(node)
+  return out.join(' ')
+}
+
 /** Evaluate the bundle against stubs and return what the shell would see. */
-function loadBundle() {
+function loadBundle(options = {}) {
   const loads = []
   const context = {
     window: {
@@ -72,10 +98,19 @@ function loadBundle() {
   // A stub React: `createElement` is enough for module evaluation, because no
   // component body runs until the shell renders it. `useState` does honour the
   // initial value, so a component built here starts in the state it really starts in
-  // (a stub that answered `undefined` would hide an initial-state branch).
+  // (a stub that answered `undefined` would hide an initial-state branch). Call 1 is
+  // the session binding, call 2 the fetched snapshot: `options.snapshot` replaces
+  // that one so a render can be checked without a fetch.
+  let hookCalls = 0
   const React = {
     createElement: (type, props, ...children) => ({ type, props, children }),
-    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useState: (initial) => {
+      const index = hookCalls
+      hookCalls += 1
+      const resolved = typeof initial === 'function' ? initial() : initial
+      const value = index === 1 && options.snapshot !== undefined ? options.snapshot : resolved
+      return [value, () => {}]
+    },
     useEffect: () => {},
     useCallback: (fn) => fn,
   }
@@ -184,6 +219,73 @@ check('the panel component is constructible without a session', () => {
   const element = panel({})
   assert.equal(typeof element, 'object')
   assert.equal(element.type, 'div')
+})
+
+check('the page lists the active frame once and the rest as paused', () => {
+  // A two-deep stack: `top` is the active frame, and the wire document repeats that
+  // same frame inside `stack` as a separate object. Listing the active task in the
+  // Paused section as well is exactly the regression this pins.
+  const document = {
+    version: 1,
+    sessionId: 'session-1',
+    cwd: 'C:/work',
+    depth: 2,
+    top: {
+      id: 'frame-2',
+      description: 'current task',
+      status: 'active',
+      createdAt: '2026-11-04T10:00:00.000Z',
+    },
+    stack: [
+      {
+        id: 'frame-1',
+        description: 'older task',
+        status: 'paused',
+        createdAt: '2026-11-04T09:00:00.000Z',
+      },
+      {
+        id: 'frame-2',
+        description: 'current task',
+        status: 'active',
+        createdAt: '2026-11-04T10:00:00.000Z',
+      },
+    ],
+    history: [],
+    warnings: [],
+  }
+
+  const { exported: fresh } = loadBundle({ snapshot: document })
+  let panel
+  const ctx = {
+    uiSession: { current: { value: { key: 'session-1' }, subscribe: () => () => {} } },
+    slots: {
+      inject: (seat, callback) => callback() ?? (() => {}),
+      register: (definition, component) => {
+        if (definition.name === 'main') panel = component
+        return () => {}
+      },
+    },
+    effect: (fn) => {
+      fn()
+    },
+  }
+  fresh.apply(ctx)
+  assert.equal(typeof panel, 'function')
+
+  const text = textOf(panel({}))
+  const activeAt = text.indexOf('current task')
+  const pausedAt = text.indexOf('Paused (')
+
+  assert.ok(activeAt >= 0, 'the active frame must render')
+  assert.ok(pausedAt > activeAt, 'the active frame renders before the paused section')
+  assert.ok(text.includes('Paused (1)'), 'exactly one frame is paused')
+
+  const pausedText = text.slice(pausedAt)
+  assert.ok(pausedText.includes('older task'), 'the paused frame must be the older one')
+  assert.ok(
+    !pausedText.includes('current task'),
+    'the active frame must not be repeated in the paused section',
+  )
 })
 
 process.stdout.write(`client bundle tests: ${passed} passed\n`)

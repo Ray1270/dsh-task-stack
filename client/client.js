@@ -136,7 +136,11 @@ window.__ModuleLoader__.load({
 				const refresh = () => setTick((value) => value + 1)
 				const stack = snapshot === null ? [] : (snapshot.stack ?? [])
 				const active = snapshot === null ? undefined : snapshot.top
-				const paused = stack.filter((frame) => frame !== active)
+				// Split by the frame's own status, not by identity with `top`: the wire
+				// document carries `top` as a *second* view object for the same frame, so
+				// `frame !== active` is true for every row and the active task would be
+				// listed as paused as well.
+				const paused = stack.filter((frame) => frame.status === 'paused')
 				const history = snapshot === null ? [] : (snapshot.history ?? [])
 
 				const body = []
