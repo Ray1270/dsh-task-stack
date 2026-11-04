@@ -12,7 +12,10 @@
     },
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./dev.patch.yml": "./dev.patch.yml"
+    "./dev.patch.yml": "./dev.patch.yml",
+    "./client": {
+      "default": "./lib/client.js"
+    }
   },
   "files": [
     "lib",
@@ -40,16 +43,17 @@
     "email": "1824676986@qq.com"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/check-build.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/build-client.mjs && node scripts/check-build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:store": "node scripts/test-store.mjs",
     "test:tools": "node scripts/test-tools.mjs",
     "test:config": "node scripts/test-config.mjs",
     "test:commands": "node scripts/test-commands.mjs",
     "test:http": "node scripts/test-http.mjs",
+    "test:client": "node scripts/test-client.mjs",
     "test:lifecycle": "node scripts/test-lifecycle.mjs",
     "demo": "node scripts/demo.mjs",
-    "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-http.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
+    "test": "node scripts/test-store.mjs && node scripts/test-tools.mjs && node scripts/test-config.mjs && node scripts/test-commands.mjs && node scripts/test-http.mjs && node scripts/test-client.mjs && node scripts/test-lifecycle.mjs && node scripts/demo.mjs",
     "probe": "node scripts/probe-load.mjs",
     "release-check": "node scripts/release-check.mjs",
     "publish-release": "node scripts/publish-release.mjs",
@@ -58,6 +62,9 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
   "peerDependencies": {

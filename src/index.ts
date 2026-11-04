@@ -183,6 +183,7 @@ function registerOptionalHttpSurface(
       host,
       store,
       () => ctx.get('connection' as never) as ComplianceGate | undefined,
+      (sessionId) => sessionWorkspace(ctx, sessionId),
       logger,
     )
   })
@@ -192,4 +193,42 @@ function registerOptionalHttpSurface(
     disposeRoute?.()
     disposeRoute = undefined
   }
+}
+
+/**
+ * Read a session's workspace from the host's own session registry.
+ *
+ * Resolved per request, for the same reason the fence is: `sessions` is provided by
+ * the host bundle rather than by this plugin, so it may arrive after the route is
+ * registered, and a captured reference would go stale across a reload.
+ *
+ * Every step is defensive because this runs inside an HTTP handler: the registry's
+ * shape is not this package's contract, and a handler that throws would surface as
+ * an opaque 400 instead of a snapshot.
+ *
+ * @param ctx - plugin context, possibly carrying `sessions`.
+ * @param sessionId - session whose `header.cwd` is wanted.
+ * @returns the absolute workspace, or `undefined` when the host does not know it.
+ */
+function sessionWorkspace(ctx: Context, sessionId: string): string | undefined {
+  let registry: unknown
+  try {
+    registry = ctx.get('sessions' as never)
+  } catch {
+    // An absent service raises rather than returning undefined in some Cordis
+    // versions; treat that exactly like "not provided".
+    return undefined
+  }
+  if (registry === null || typeof registry !== 'object') return undefined
+  const get = (registry as { get?: (id: string) => unknown }).get
+  if (typeof get !== 'function') return undefined
+  let session: unknown
+  try {
+    session = get.call(registry, sessionId)
+  } catch {
+    return undefined
+  }
+  if (session === null || typeof session !== 'object') return undefined
+  const cwd = (session as { header?: { cwd?: unknown } }).header?.cwd
+  return typeof cwd === 'string' && cwd.length > 0 ? cwd : undefined
 }

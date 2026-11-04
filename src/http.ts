@@ -139,12 +139,26 @@ function toWarningView(warning: StoreWarning): WarningView {
 export type GateResolver = () => ComplianceGate | undefined
 
 /**
+ * Resolve a session's working directory from the host's own session registry.
+ *
+ * The browser does not authoritatively know this, and a client-supplied path is an
+ * input a caller controls, so the host's record wins whenever it has one. The
+ * `cwd` query parameter remains as a fallback for a request whose session the host
+ * cannot see (a replayed state file, a test harness, another process's session).
+ *
+ * @param sessionId - the session whose workspace is wanted.
+ * @returns an absolute path, or `undefined` when the host does not know it.
+ */
+export type CwdResolver = (sessionId: string) => string | undefined
+
+/**
  * Register the snapshot route.
  *
  * @param host - the `webServer` service.
  * @param store - the plugin's single store instance.
  * @param resolveGate - resolves the `connection` service per request; a missing
  *   gate fails closed with 503 rather than serving unauthenticated.
+ * @param resolveCwd - resolves the session's workspace from the host registry.
  * @param logger - plugin logger.
  * @returns the route disposer, or `undefined` when the path is already claimed.
  */
@@ -152,13 +166,14 @@ export function registerSnapshotRoute(
   host: WebRouteHost,
   store: Store,
   resolveGate: GateResolver,
+  resolveCwd: CwdResolver,
   logger: HttpLogger,
 ): (() => void) | undefined {
   try {
     return host.register({
       kind: 'exact',
       path: SNAPSHOT_PATH,
-      handler: (req, res) => handleSnapshot(req, res, store, resolveGate, logger),
+      handler: (req, res) => handleSnapshot(req, res, store, resolveGate, resolveCwd, logger),
     })
   } catch (error) {
     // A duplicate path means another instance of this plugin (or an unrelated one)
@@ -175,6 +190,7 @@ async function handleSnapshot(
   res: ServerResponse,
   store: Store,
   resolveGate: GateResolver,
+  resolveCwd: CwdResolver,
   logger: HttpLogger,
 ): Promise<void> {
   // Fail closed: without the Connection fence there is no trustworthy way to tell
@@ -208,7 +224,12 @@ async function handleSnapshot(
     sendJson(res, 400, { error: 'sessionId query parameter is required' })
     return
   }
-  const cwd = url.searchParams.get('cwd')?.trim() ?? process.cwd()
+
+  // The host's own record of the session's workspace wins; the query parameter is
+  // only a fallback for a session this process cannot see. Trusting the caller
+  // first would let any authenticated page point the reader at another workspace.
+  const fromQuery = url.searchParams.get('cwd')?.trim()
+  const cwd = resolveCwd(sessionId) ?? fromQuery ?? process.cwd()
   if (!isAbsolute(cwd)) {
     sendJson(res, 400, { error: 'cwd must be an absolute path' })
     return

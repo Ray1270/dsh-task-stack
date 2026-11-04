@@ -81,6 +81,15 @@ await check('buildSnapshotDocument projects frames, history and warnings', async
 })
 
 // --- a real server ------------------------------------------------------------
+/**
+ * Stand-in for the host session registry. The default answers nothing, so the
+ * `cwd` query parameter keeps working for every existing case; the precedence test
+ * below swaps in a registry that knows the session.
+ */
+const noSession = () => undefined
+const sessionRegistry = new Map([[sessionId, workspace]])
+const fromRegistry = (id) => sessionRegistry.get(id)
+
 const ctx = new Context()
 ctx.provide('connection', gate)
 const fiber = ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
@@ -92,7 +101,7 @@ const port = server.port
 assert.ok(typeof port === 'number' && port > 0, `expected a bound port, got ${String(port)}`)
 const base = `http://127.0.0.1:${String(port)}`
 
-const dispose = registerSnapshotRoute(server, store, () => gate, logger)
+const dispose = registerSnapshotRoute(server, store, () => gate, noSession, logger)
 assert.equal(typeof dispose, 'function', 'the route must register')
 process.stdout.write(`  server on ${base}\n`)
 
@@ -115,6 +124,31 @@ await check('the snapshot endpoint answers and matches the state file', async ()
     'the endpoint must report the ids the state file holds',
   )
   assert.equal(body.stack.length, onDisk.stack.length)
+})
+
+await check('the host session registry wins over the cwd query parameter', async () => {
+  // A caller-controlled path must not be able to redirect the reader: the request
+  // below points `cwd` at an empty directory, and the answer must still describe
+  // the workspace the host associates with the session.
+  const registryCtx = new Context()
+  registryCtx.provide('connection', gate)
+  const registryFiber = registryCtx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
+  await registryFiber.await()
+  const registryServer = registryCtx.get('webServer')
+  const wrongWorkspace = join(root, 'not-the-workspace')
+  const registryDispose = registerSnapshotRoute(registryServer, store, () => gate, fromRegistry, logger)
+  assert.equal(typeof registryDispose, 'function')
+
+  const response = await fetch(
+    `http://127.0.0.1:${String(registryServer.port)}${SNAPSHOT_PATH}?sessionId=${encodeURIComponent(sessionId)}&cwd=${encodeURIComponent(wrongWorkspace)}`,
+  )
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.cwd, workspace, 'the answer must name the host-resolved workspace')
+  assert.equal(body.depth, 2, 'and must read the file under it, not under the query path')
+
+  registryDispose?.()
+  await registryCtx.fiber.dispose()
 })
 
 await check('a rejected Host is refused and leaks no state', async () => {
@@ -184,7 +218,7 @@ await check('a missing connection service fails closed with 503', async () => {
   const otherFiber = other.plugin(WebServer, { host: '127.0.0.1', port: 0 })
   await otherFiber.await()
   const otherServer = other.get('webServer')
-  const otherDispose = registerSnapshotRoute(otherServer, store, () => undefined, logger)
+  const otherDispose = registerSnapshotRoute(otherServer, store, () => undefined, noSession, logger)
   assert.equal(typeof otherDispose, 'function')
 
   const response = await fetch(
@@ -205,9 +239,9 @@ await check('disposing the route unregisters it', async () => {
 })
 
 await check('a duplicate registration is reported, not thrown at the plugin', async () => {
-  const first = registerSnapshotRoute(server, store, () => gate, logger)
+  const first = registerSnapshotRoute(server, store, () => gate, noSession, logger)
   assert.equal(typeof first, 'function')
-  const second = registerSnapshotRoute(server, store, () => gate, logger)
+  const second = registerSnapshotRoute(server, store, () => gate, noSession, logger)
   assert.equal(second, undefined, 'the second registration must degrade to undefined')
   assert.ok(warnings.some((line) => line.includes(SNAPSHOT_PATH)), 'and it must be logged')
   first?.()

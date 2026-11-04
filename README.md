@@ -154,6 +154,25 @@ curl.exe "http://127.0.0.1:3080/api/dsh-task-stack/snapshot?sessionId=<id>&cwd=D
 curl.exe -i "http://127.0.0.1:3080/api/dsh-task-stack/snapshot?sessionId=<id>"
 ```
 
+`cwd` 是可选的：宿主会先用**自己的会话登记表**按 `sessionId` 解析该会话的工作目录，只有解析不到时才退回查询参数。浏览器的说法不是权威，因此宿主优先——否则任何通过鉴权的页面都能把读取指向别的工作区。
+
+## 侧栏面板（Web GUI）
+
+在 Web GUI 里，插件会注册一个可折叠入口 **「任务栈」**，点击后打开只读面板：
+
+- **Active** —— 当前任务（栈顶），带创建时间
+- **Paused（n）** —— 被压在下面的任务，按栈序
+- **Recently completed** —— 最近 3 条完成记录与结论
+- 每 4 秒自动刷新，也可点 **Refresh**
+
+三条设计约束：
+
+- **只读。** 面板不提供关闭/清理按钮：写入面需要单独的安全设计，而宿主路由只暴露 `getSnapshot`。改栈仍走模型工具或 `/focus`。
+- **座位缺失不会崩。** 两个座位（`sidebar.panellist` 与 `main`）都由外壳插件声明，本包在运行时不依赖它们，因此注册走 `slots.inject`：外壳没声明就只是不出现，不会让整个 GUI 起不来。
+- **没有会话也能渲染。** 未选中会话时显示提示而不是抛错。
+
+客户端半侧是**手写的 `client/client.js`**，构建时原样复制到 `lib/client.js`（不经过 JSX 转译或打包器），因此读到的就是浏览器执行的。宿主按 `dsh.client` 声明扫描 Loader 行，并从 `/plugins/<包名>/client.js` 提供它——**新增或改动面板后需要重启 DSH 才会加载**。
+
 ## 配置
 
 在 profile patch 层的该行 `config:` 下配置，全部可选；Cordis 会在插件启动**之前**校验，越界直接拒绝加载该插件并在启动日志里指出字段（不会静默夹紧成另一个策略）。
@@ -223,7 +242,7 @@ curl.exe -i "http://127.0.0.1:3080/api/dsh-task-stack/snapshot?sessionId=<id>"
 # 在克隆出来的仓库根目录里执行
 pnpm typecheck        # tsc strict（含 noUncheckedIndexedAccess / exactOptionalPropertyTypes）
 pnpm build            # tsc + 产物自检
-pnpm test             # 69 项：store 22 + tools 18 + config 12 + commands 13 + lifecycle 4 + demo
+pnpm test             # 85 项：store 22 + tools 18 + config 12 + commands 13 + http 12 + client 5 + lifecycle 4 + demo
 pnpm demo             # 真实 ToolRuntime 里把三个工具与 /focus 跑一遍，打印 markdown 与落盘文件
 pnpm probe            # 无宿主装载：真 Cordis Context + 注册面断言 + 全生命周期实跑
 ```
@@ -287,12 +306,17 @@ dsh-task-stack/
 │   ├── commands.ts           # /focus 斜杠命令
 │   ├── store.ts              # 路径解析 + 原子写入 + per-file 锁 + 容错读取
 │   └── types.ts              # 共享类型与默认值
+├── client/
+│   └── client.js             # 浏览器半侧（手写 __ModuleLoader__ bundle，原样复制到 lib/）
 └── scripts/
-    ├── release-check.mjs     # 发布闸门：10 步顺序执行（CI 与 prepack 共用）
+    ├── release-check.mjs     # 发布闸门：13 步顺序执行（CI 与 prepack 共用）
+    ├── build-client.mjs      # 复制客户端 bundle 并校验其形态
     ├── test-store.mjs        # 状态层 22 项
     ├── test-tools.mjs        # 工具层 18 项
     ├── test-config.mjs       # 配置与边界 12 项
     ├── test-commands.mjs     # /focus 13 项
+    ├── test-http.mjs         # 真实 dsh-host-webserver 12 项
+    ├── test-client.mjs       # 客户端 bundle 契约 5 项
     ├── test-lifecycle.mjs    # 真实 ToolRuntime 卸载/重载 4 项
     ├── probe-load.mjs        # 无宿主装载 + 全生命周期实跑
     ├── demo.mjs              # 可读演示

@@ -39,6 +39,7 @@ if (!existsSync(tsc)) {
 const steps = [
   { name: 'typecheck', command: process.execPath, args: [tsc, '-p', 'tsconfig.json', '--noEmit'] },
   { name: 'build', command: process.execPath, args: [tsc, '-p', 'tsconfig.json'] },
+  { name: 'build-client', command: process.execPath, args: ['scripts/build-client.mjs'] },
   { name: 'check-build', command: process.execPath, args: ['scripts/check-build.mjs'] },
   { name: 'probe', command: process.execPath, args: ['scripts/probe-load.mjs'] },
   { name: 'test:store', command: process.execPath, args: ['scripts/test-store.mjs'] },
@@ -46,6 +47,7 @@ const steps = [
   { name: 'test:config', command: process.execPath, args: ['scripts/test-config.mjs'] },
   { name: 'test:commands', command: process.execPath, args: ['scripts/test-commands.mjs'] },
   { name: 'test:http', command: process.execPath, args: ['scripts/test-http.mjs'] },
+  { name: 'test:client', command: process.execPath, args: ['scripts/test-client.mjs'] },
   { name: 'test:lifecycle', command: process.execPath, args: ['scripts/test-lifecycle.mjs'] },
   { name: 'demo', command: process.execPath, args: ['scripts/demo.mjs'] },
 ]
