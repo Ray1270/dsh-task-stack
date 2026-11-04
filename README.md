@@ -286,9 +286,11 @@ npm publish --access public      # scope 包首次发布必须显式 --access pu
 
 ## 兼容性
 
-- DSH：`0.2.0-rc.2`（开发与验证所用版本）
+- DSH：`>=0.2.0-rc.2 <0.3.0`（已在 `0.2.0-rc.2` 与 `0.2.1-rc.2` 上实测）
 - 依赖：`@deepseek-ai/cordis ^4.0.2`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-commands`、`@deepseek-ai/schemastery ^3.18.2`（均为 peerDependencies，由宿主在运行时提供）
 - 不注册任何 prompt section、不做自动注入
+
+> **为什么声明顶层 `engines.dsh`**：app-boot 的兼容检查在插件 manifest **有 `engines.dsh` 时只看它**，没有才回落到 `@deepseek-ai/dsh*` 的 peer 范围。早先版本只写了精确 peer（`0.2.0-rc.2`），DSH 升到 `0.2.1-rc.2` 后整个插件被静默跳过（`skipping profile bundle`），工具和面板一起消失。顶层 `engines.dsh` 让"支持哪个 DSH"成为一处显式声明，且 `includePrerelease` 使 rc 线能被正确覆盖。
 
 ## 项目结构
 
