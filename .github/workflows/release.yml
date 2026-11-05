@@ -75,14 +75,34 @@ jobs:
       - name: Install dev dependencies
         run: pnpm install --frozen-lockfile
 
+      # Job logs from this repository are not readable anonymously, so the two
+      # steps below make the publish environment and any failure self-reporting:
+      # `::notice::`/`::error::` lines become check-run annotations, which the API
+      # serves without a token. Temporary diagnosis for the first trusted-publish
+      # run — the failure annotation stays, the probe goes.
+      - name: Probe the publish environment
+        if: always()
+        run: |
+          echo "::notice::node=$(node --version) npm=$(npm --version)"
+          echo "::notice::oidc-url=$([ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && echo present || echo MISSING) oidc-token=$([ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ] && echo present || echo MISSING)"
+          echo "::notice::token-env=$([ -n "${NODE_AUTH_TOKEN:-}" ] && echo present || echo MISSING) config-user=$(npm config get userconfig 2>/dev/null)"
+          npm config list 2>&1 | sed -n '1,25p' | sed 's/^/::notice::/'
+
       # The script runs `npm publish`, whose `prepack` is the full release gate
       # (11 steps: typecheck, build, artifact check, probe, five suites, the HTTP
       # surface suite, lifecycle, demo). Nothing is published if it fails.
       - name: Publish
-        run: node scripts/publish-release.mjs --tag "$GITHUB_REF_NAME"
         # No NODE_AUTH_TOKEN: `npm publish` detects the trusted-publishing
         # environment itself and trades the job's OIDC token for a credential
         # that expires when the job ends.
+        run: |
+          set -o pipefail
+          node scripts/publish-release.mjs --tag "$GITHUB_REF_NAME" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+
+      - name: Surface the publish failure
+        if: failure()
+        run: |
+          node -e 'const fs=require("node:fs");const p=process.env.RUNNER_TEMP+"/publish.log";if(!fs.existsSync(p))process.exit(0);const t=fs.readFileSync(p,"utf8").trimEnd();const tail=t.slice(-700);console.log("::error title=publish-release::"+encodeURIComponent(tail));'
 
       - name: Create the GitHub Release
         # Only a real version tag may open a Release. Without this guard the
