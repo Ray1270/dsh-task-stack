@@ -10,10 +10,14 @@
 # the version number permanently unusable, which is what happened to 0.2.0 before
 # this workflow existed.
 #
-# Required secret: NPM_TOKEN — an npm Access Token with publish rights for this
-# package, stored as a repository secret (Settings → Secrets and variables →
-# Actions). Fine-grained tokens cannot publish yet, so this must be an Automation
-# or Publish token, and it must have 2FA bypass enabled.
+# Authentication is **trusted publishing**, not a stored secret: npm swaps a
+# short-lived OIDC token minted by the runner (the `id-token: write` permission
+# below) for a one-shot publish credential, and records a provenance attestation
+# alongside it. There is no long-lived token in this repository to leak and none
+# to rotate — the previous NPM_TOKEN secret was removed after it expired and broke
+# a release in the middle of one. The npm side trusts this repository and this
+# workflow *file name* (npm → package → Settings → Trusted publishing), so
+# renaming or moving release.yml means updating that entry in the same change.
 name: Release
 
 on:
@@ -25,11 +29,15 @@ on:
   # also safe, because every step is idempotent.
   workflow_dispatch:
 
-# `contents: write` is needed to create the Release. It is granted to this workflow
+# `contents: write` is needed to create the Release. `id-token: write` is what
+# lets the runner mint the OIDC token that trusted publishing exchanges for a
+# publish credential; without it `npm publish` has no authentication at all, which
+# fails with a bare 404/401 from the registry. Both are granted to this workflow
 # file only, and fork pull requests never run it (tag pushes cannot come from a
 # fork).
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
@@ -51,8 +59,18 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
-          # Writes the registry auth into .npmrc for `npm publish`.
-          registry-url: 'https://registry.npmjs.org'
+          # No `registry-url`: that option writes `_authToken=${NODE_AUTH_TOKEN}`
+          # into .npmrc, and with trusted publishing there is no token to
+          # substitute. npm already defaults to the public registry, and the
+          # credential arrives through the OIDC exchange at publish time.
+
+      - name: Ensure npm supports trusted publishing
+        # The OIDC exchange needs npm >= 11.5.1. Node 24 ships an 11.x that
+        # qualifies today, but the patch version follows the runner image, so the
+        # floor is stated here instead of inherited from whatever the image has.
+        run: |
+          npm install -g 'npm@^11.5.1'
+          npm --version
 
       - name: Install dev dependencies
         run: pnpm install --frozen-lockfile
@@ -62,8 +80,9 @@ jobs:
       # surface suite, lifecycle, demo). Nothing is published if it fails.
       - name: Publish
         run: node scripts/publish-release.mjs --tag "$GITHUB_REF_NAME"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # No NODE_AUTH_TOKEN: `npm publish` detects the trusted-publishing
+        # environment itself and trades the job's OIDC token for a credential
+        # that expires when the job ends.
 
       - name: Create the GitHub Release
         # Only a real version tag may open a Release. Without this guard the

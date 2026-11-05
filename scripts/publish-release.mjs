@@ -80,11 +80,9 @@ const existing = spawnSync('npm', ['view', `${name}@${version}`, 'version'], {
 const published = existing.status === 0 && existing.stdout.trim() === version
 
 if (!published && !dryRun && !hasCredential()) {
-  // A missing secret is a configuration mistake with a confusing symptom (a bare
-  // 401 from the registry), so name it.
-  process.stderr.write(
-    'publish-release: no npm credential found. Set the NPM_TOKEN repository secret (Settings -> Secrets and variables -> Actions) to the value of an npm Automation or Publish token.\n',
-  )
+  // A missing credential is a configuration mistake with a confusing symptom (a
+  // bare 401/404 from the registry), so name it.
+  process.stderr.write(noCredentialMessage())
   process.exit(1)
 }
 
@@ -143,17 +141,38 @@ function mostRecentTag() {
   return tags[0]
 }
 
+/** The message to print when nothing can authenticate. A function, like the rest
+ * of this file's helpers, so a guard near the top can use it before the
+ * definition scrolls into view. */
+function noCredentialMessage() {
+  return 'publish-release: no npm credential found. Either configure trusted publishing for this repository on npm (package -> Settings -> Trusted publishing) so a workflow with `id-token: write` can mint a short-lived token, or set the NPM_TOKEN repository secret to a publish-capable npm token.\n'
+}
+
 /**
- * Whether the environment holds an npm credential.
+ * Whether the environment can authenticate to the registry at all.
  *
- * `NODE_AUTH_TOKEN` is what `actions/setup-node` uses; a developer machine may
- * instead have a token in `~/.npmrc`, which `npm whoami` confirms. Checking both
- * keeps the CI-oriented guard from blocking a local run.
+ * Three ways in, checked in the order npm itself resolves them:
+ *
+ *   1. `NODE_AUTH_TOKEN` — a long-lived token in the environment (classic or
+ *      granular). Still supported, so a repository that keeps using a secret
+ *      keeps working;
+ *   2. GitHub Actions OIDC — trusted publishing, no secret at all. The runner
+ *      exports `ACTIONS_ID_TOKEN_REQUEST_URL` only when the job holds
+ *      `id-token: write`, so its presence is precisely the condition under
+ *      which npm can mint a short-lived publish credential;
+ *   3. a token in `~/.npmrc` on a developer machine, which `npm whoami` proves.
+ *
+ * Checking all three keeps this CI-oriented guard from refusing a run that npm
+ * would have handled, and from calling a *missing* credential a publish failure.
  *
  * @returns true when a credential appears to be available.
  */
 function hasCredential() {
   if ((process.env.NODE_AUTH_TOKEN ?? '').trim() !== '') return true
+  // Ahead of `npm whoami`: on a trusted-publishing runner there is no token for
+  // whoami to find, so asking it would spend a network round trip to learn
+  // nothing.
+  if (hasOidcToken()) return true
   const whoami = spawnSync('npm', ['whoami'], {
     cwd: here,
     encoding: 'utf8',
@@ -162,16 +181,30 @@ function hasCredential() {
   return whoami.status === 0 && whoami.stdout.trim() !== ''
 }
 
+/**
+ * Whether the job can mint a GitHub OIDC token for npm trusted publishing.
+ *
+ * Both variables are injected by the Actions runner only for jobs whose
+ * `permissions` block includes `id-token: write`. Node reads them, not this
+ * script — the check exists so the guard below understands a credential that
+ * never appears as a string anywhere.
+ *
+ * @returns true when the OIDC exchange is possible.
+ */
+function hasOidcToken() {
+  return (
+    (process.env.ACTIONS_ID_TOKEN_REQUEST_URL ?? '').trim() !== '' &&
+    (process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN ?? '').trim() !== ''
+  )
+}
+
 /** Report credential availability without deciding anything. */
 function reportCredential() {
   const fromEnv = (process.env.NODE_AUTH_TOKEN ?? '').trim() !== ''
+  const oidc = hasOidcToken()
   const available = hasCredential()
   process.stdout.write(
-    `publish-release: NODE_AUTH_TOKEN ${fromEnv ? 'is set' : 'is empty'}; npm credential ${available ? 'available' : 'NOT available'}\n`,
+    `publish-release: NODE_AUTH_TOKEN ${fromEnv ? 'is set' : 'is empty'}; OIDC ${oidc ? 'available' : 'unavailable'}; npm credential ${available ? 'available' : 'NOT available'}\n`,
   )
-  if (!available) {
-    process.stderr.write(
-      'publish-release: no npm credential found. Set the NPM_TOKEN repository secret (Settings -> Secrets and variables -> Actions) to the value of an npm Automation or Publish token.\n',
-    )
-  }
+  if (!available) process.stderr.write(noCredentialMessage())
 }

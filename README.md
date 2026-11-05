@@ -343,7 +343,11 @@ git push && git push origin v0.3.0
 
 自动化做四件事：装依赖 → `node scripts/publish-release.mjs --tag $GITHUB_REF_NAME`（内部跑 `npm publish`，其 `prepack` 就是那套发布闸门）→ 产出 tarball → 建 Release 并附上该 tarball。
 
-**需要一次配置**：在仓库 **Settings → Secrets and variables → Actions** 加一个 `NPM_TOKEN`（npm 的 **Automation** 或 **Publish** token，且必须勾选 **Bypass 2FA**；fine-grained token 目前还不能发布）。
+**认证走 trusted publishing（OIDC），不需要任何密钥**：工作流声明了 `id-token: write`，`npm publish` 会用 runner 签发的短期 OIDC token 换一个只在本次 job 内有效的发布凭据，并顺带附上 provenance 证明。没有长期 token，也就没有会过期的东西要换。
+
+需要**一次性**在 npm 侧登记这层信任：npmjs.com → 你的包 → **Settings → Trusted publishing** → 选 GitHub Actions，填 owner `Ray1270`、仓库 `dsh-task-stack`、工作流文件名 `release.yml`。工作流一旦改名或搬家，这里必须同步改，否则发布会以 404 失败。
+
+> 旧的 `NPM_TOKEN` 仓库 secret 已经用不上了，可以删掉。`scripts/publish-release.mjs` 仍然兼容它（以及本地 `~/.npmrc` 里的 token），所以老仓库或手工发布会照常工作。
 
 ### 三种 ref 的三种行为
 
