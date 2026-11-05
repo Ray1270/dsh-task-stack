@@ -143,27 +143,67 @@ window.__ModuleLoader__.load({
 				const paused = stack.filter((frame) => frame.status === 'paused')
 				const history = snapshot === null ? [] : (snapshot.history ?? [])
 
+				/** `HH:MM`, in the reader's own locale and clock. */
+				const clock = (iso) => {
+					const at = new Date(iso)
+					return Number.isNaN(at.getTime())
+						? ''
+						: at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+				}
+
+				/** How long ago a frame started, phrased for a trailing "…· <this>". */
+				const elapsed = (iso) => {
+					const at = new Date(iso).getTime()
+					if (Number.isNaN(at)) return ''
+					const minutes = Math.max(0, Math.round((Date.now() - at) / 60000))
+					if (minutes < 1) return '刚刚'
+					if (minutes < 60) return `${String(minutes)} 分钟前`
+					const hours = Math.round(minutes / 60)
+					if (hours < 24) return `${String(hours)} 小时前`
+					return `${String(Math.round(hours / 24))} 天前`
+				}
+
+				/** One small grey heading with an optional trailing hint. */
+				const heading = (key, text, hint) =>
+					h(
+						'div',
+						{
+							key,
+							// A flex row with `gap`: an inline span's margin-left is easy to lose
+							// against the surrounding text, and this heading is the only place the
+							// two labels sit side by side.
+							style: { display: 'flex', alignItems: 'baseline', gap: 8, margin: '0 0 6px' },
+						},
+						h('span', { style: { color: colors.secondary, fontSize: 11, fontWeight: 600 } }, text),
+						hint === undefined
+							? null
+							: h('span', { style: { color: colors.tertiary, fontSize: 11 } }, hint),
+					)
+
 				const body = []
 				if (sessionId === undefined || sessionId === null || sessionId === '') {
 					body.push(
 						h(
 							'p',
-							{ key: 'nosession', style: { color: colors.secondary, margin: 0 } },
-							'No session is selected, so there is no stack to read.',
+							{ key: 'nosession', style: { color: colors.secondary, margin: 0, lineHeight: 1.7 } },
+							'当前没有选中会话，所以没有栈可读。',
 						),
 					)
 				} else if (snapshot === null) {
 					body.push(
-						h('p', { key: 'loading', style: { color: colors.secondary, margin: 0 } }, 'Loading…'),
+						h('p', { key: 'loading', style: { color: colors.tertiary, margin: 0 } }, '读取中…'),
 					)
 				} else if (stack.length === 0) {
 					body.push(
 						h(
-							'p',
-							{ key: 'empty', style: { color: colors.secondary, margin: 0, lineHeight: 1.6 } },
-							'This session has no open task. The model pushes one by calling ',
-							h('code', { style: { fontSize: '0.92em' } }, 'focus_task'),
-							' when a multi-step objective appears.',
+							'div',
+							{ key: 'empty', style: { color: colors.secondary, lineHeight: 1.75 } },
+							h('p', { style: { margin: '0 0 6px', color: colors.primary } }, '现在没有未完成的任务。'),
+							h(
+								'p',
+								{ style: { margin: 0, fontSize: 12 } },
+								'我在对话里遇到多步骤目标时，会把它们压进这个栈；做完一件就弹出去一件。你在这里看到的永远是当前真实状态，不是计划。',
+							),
 						),
 					)
 				} else {
@@ -177,21 +217,13 @@ window.__ModuleLoader__.load({
 									background: colors.surface,
 									borderRadius: 8,
 									padding: '10px 12px',
-									marginBottom: 12,
+									marginBottom: 16,
 								},
 							},
 							h(
 								'div',
-								{
-									style: {
-										fontSize: 11,
-										letterSpacing: '0.04em',
-										textTransform: 'uppercase',
-										color: colors.accent,
-										marginBottom: 4,
-									},
-								},
-								'Active',
+								{ style: { color: colors.accent, fontSize: 11, fontWeight: 600, marginBottom: 5 } },
+								'正在做',
 							),
 							h(
 								'div',
@@ -203,41 +235,51 @@ window.__ModuleLoader__.load({
 								: h(
 										'div',
 										{ style: { color: colors.tertiary, fontSize: 11, marginTop: 6 } },
-										new Date(active.createdAt).toLocaleTimeString(),
+										`${clock(active.createdAt)} 开始 · ${elapsed(active.createdAt)}`,
 									),
 						),
 					)
 
 					if (paused.length > 0) {
 						body.push(
-							h(
-								'div',
-								{ key: 'pausedlabel', style: { color: colors.secondary, fontSize: 11, marginBottom: 6 } },
-								`Paused (${String(paused.length)})`,
+							heading(
+								'pausedlabel',
+								`压着的 · ${String(paused.length)} 件`,
+								'上面这件做完，依次回来',
 							),
 						)
 						body.push(
 							h(
 								'ul',
-								{ key: 'paused', style: { listStyle: 'none', margin: '0 0 12px', padding: 0 } },
-								// The store keeps the stack deepest-first, and so does the wire.
-								paused.map((frame) =>
-									h(
-										'li',
-										{
-											key: frame.id,
-											style: {
-												color: colors.secondary,
-												lineHeight: 1.5,
-												padding: '6px 0 6px 10px',
-												borderLeft: `2px solid ${colors.border}`,
-												marginBottom: 4,
-												wordBreak: 'break-word',
+								{
+									key: 'paused',
+									style: {
+										listStyle: 'none',
+										margin: '0 0 16px',
+										padding: '0 0 0 12px',
+										borderLeft: `2px solid ${colors.border}`,
+									},
+								},
+								// The store keeps the stack deepest-first; reading downward must lead
+								// back towards the active frame, so the nearest one prints first.
+								paused
+									.slice()
+									.reverse()
+									.map((frame) =>
+										h(
+											'li',
+											{
+												key: frame.id,
+												style: {
+													color: colors.secondary,
+													lineHeight: 1.5,
+													padding: '5px 0',
+													wordBreak: 'break-word',
+												},
 											},
-										},
-										frame.description,
+											frame.description,
+										),
 									),
-								),
 							),
 						)
 					}
@@ -246,10 +288,10 @@ window.__ModuleLoader__.load({
 				if (history.length > 0) {
 					const recent = history.slice(-3).reverse()
 					body.push(
-						h(
-							'div',
-							{ key: 'historylabel', style: { color: colors.tertiary, fontSize: 11, marginBottom: 6 } },
-							`Recently completed (${String(history.length)})`,
+						heading(
+							'historylabel',
+							`最近做完 · ${String(recent.length)} 件`,
+							history.length > recent.length ? `共 ${String(history.length)} 件` : undefined,
 						),
 					)
 					body.push(
@@ -261,12 +303,28 @@ window.__ModuleLoader__.load({
 									'li',
 									{
 										key: entry.id,
-										style: { fontSize: 12, color: colors.tertiary, lineHeight: 1.5, marginBottom: 6 },
+										style: { fontSize: 12, color: colors.tertiary, lineHeight: 1.5, marginBottom: 8 },
 									},
-									h('div', { style: { textDecoration: 'line-through' } }, entry.description),
+									h(
+										'div',
+										null,
+										h('span', { style: { color: colors.tertiary, marginRight: 5 } }, '✓'),
+										h('span', { style: { textDecoration: 'line-through' } }, entry.description),
+									),
 									entry.conclusion === ''
 										? null
-										: h('div', { style: { color: colors.secondary, wordBreak: 'break-word' } }, entry.conclusion),
+										: h(
+												'div',
+												{
+													style: {
+														color: colors.secondary,
+														wordBreak: 'break-word',
+														marginTop: 2,
+														paddingLeft: 16,
+													},
+												},
+												entry.conclusion,
+											),
 								),
 							),
 						),
@@ -276,7 +334,7 @@ window.__ModuleLoader__.load({
 				const problems = []
 				if (failure !== '') problems.push(failure)
 				if (snapshot !== null && Array.isArray(snapshot.warnings) && snapshot.warnings.length > 0) {
-					problems.push(`${String(snapshot.warnings.length)} state warning(s)`)
+					problems.push(`状态文件有 ${String(snapshot.warnings.length)} 条告警`)
 				}
 				if (problems.length > 0) {
 					body.push(
@@ -290,7 +348,7 @@ window.__ModuleLoader__.load({
 
 				return h(
 					'div',
-					{ style: { padding: 16, fontSize: 13, fontFamily: 'inherit' } },
+					{ style: { padding: 16, fontSize: 13, fontFamily: 'inherit', maxWidth: 720 } },
 					h(
 						'div',
 						{
@@ -298,13 +356,13 @@ window.__ModuleLoader__.load({
 								display: 'flex',
 								alignItems: 'center',
 								justifyContent: 'space-between',
-								marginBottom: 12,
+								marginBottom: 6,
 							},
 						},
 						h(
 							'div',
 							{ style: { color: colors.primary, fontWeight: 600, fontSize: 14 } },
-							'Task stack',
+							'任务栈',
 							stack.length === 0
 								? null
 								: h(
@@ -317,10 +375,10 @@ window.__ModuleLoader__.load({
 												color: colors.secondary,
 												border: `1px solid ${colors.border}`,
 												borderRadius: 999,
-												padding: '1px 7px',
+												padding: '1px 8px',
 											},
 										},
-										String(stack.length),
+										`未完成 ${String(stack.length)}`,
 									),
 						),
 						h(
@@ -339,25 +397,23 @@ window.__ModuleLoader__.load({
 									cursor: 'pointer',
 								},
 							},
-							'Refresh',
+							'刷新',
 						),
 					),
+					h(
+						'p',
+						{
+							key: 'legend',
+							style: {
+								color: colors.secondary,
+								fontSize: 11,
+								lineHeight: 1.7,
+								margin: '0 0 14px',
+							},
+						},
+						'一个栈：最上面是我此刻正在做的；下面压着的，等它做完才回来；做完的会弹出去。',
+					),
 					body,
-					sessionId === undefined || sessionId === null || sessionId === ''
-						? null
-						: h(
-								'p',
-								{
-									style: {
-										color: colors.tertiary,
-										fontSize: 10,
-										margin: '14px 0 0',
-										fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-										wordBreak: 'break-all',
-									},
-								},
-								sessionId,
-							),
 				)
 			}
 		}

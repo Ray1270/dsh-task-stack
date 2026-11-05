@@ -250,7 +250,14 @@ check('the page lists the active frame once and the rest as paused', () => {
         createdAt: '2026-11-04T10:00:00.000Z',
       },
     ],
-    history: [],
+    history: [
+      {
+        id: 'frame-0',
+        description: 'finished task',
+        conclusion: 'it landed',
+        completedAt: '2026-11-04T08:00:00.000Z',
+      },
+    ],
     warnings: [],
   }
 
@@ -274,11 +281,11 @@ check('the page lists the active frame once and the rest as paused', () => {
 
   const text = textOf(panel({}))
   const activeAt = text.indexOf('current task')
-  const pausedAt = text.indexOf('Paused (')
+  const pausedAt = text.indexOf('压着的 ·')
 
   assert.ok(activeAt >= 0, 'the active frame must render')
   assert.ok(pausedAt > activeAt, 'the active frame renders before the paused section')
-  assert.ok(text.includes('Paused (1)'), 'exactly one frame is paused')
+  assert.ok(text.includes('压着的 · 1 件'), 'exactly one frame is paused')
 
   const pausedText = text.slice(pausedAt)
   assert.ok(pausedText.includes('older task'), 'the paused frame must be the older one')
@@ -286,6 +293,15 @@ check('the page lists the active frame once and the rest as paused', () => {
     !pausedText.includes('current task'),
     'the active frame must not be repeated in the paused section',
   )
+
+  // Self-explanatory without the model's help: the depth badge, the one-line legend,
+  // the three section headings, and a finished frame with its conclusion.
+  assert.ok(text.includes('未完成 2'), 'the header states how many tasks are still open')
+  assert.ok(text.includes('最上面是我此刻正在做的'), 'the legend explains the stack metaphor')
+  assert.ok(text.includes('正在做'), 'the active section is labelled')
+  assert.ok(text.includes('最近做完 · 1 件'), 'the finished section is labelled')
+  assert.ok(text.includes('finished task'), 'a finished frame is listed')
+  assert.ok(text.includes('it landed'), 'its conclusion is listed')
 })
 
 process.stdout.write(`client bundle tests: ${passed} passed\n`)
