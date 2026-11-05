@@ -349,6 +349,9 @@ git push && git push origin v0.3.0
 
 > 旧的 `NPM_TOKEN` 仓库 secret 已经用不上了，可以删掉。`scripts/publish-release.mjs` 仍然兼容它（以及本地 `~/.npmrc` 里的 token），所以老仓库或手工发布会照常工作。
 
+> **坑（2026-09-03 起）**：新建的 trusted publisher 默认**只允许 `npm stage publish`**（暂存发布，人审后再放行），直接 `npm publish` 会被 registry 拒成
+> `403 OIDC permission denied for this action` —— 看着像身份没对上，其实是这个动作没被授权。新建时必须在 **Allowed actions** 里额外勾上 **`npm publish`**（`npm dist-tag` 视需要）。已建好的连接字段不可改，只能删掉重建。
+
 ### 三种 ref 的三种行为
 
 脚本按 ref 判断意图，因为 `workflow_dispatch` 拿到的 `GITHUB_REF_NAME` 是**分支名**而不是 tag：
