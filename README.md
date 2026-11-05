@@ -278,9 +278,9 @@ npm publish --access public      # scope 包首次发布必须显式 --access pu
 
 要点：
 
-- **发布闸门挂在 `prepack` 上**（`pack` 与 `publish` 都会触发），由 [scripts/release-check.mjs](scripts/release-check.mjs) 用**纯 Node 顺序跑 10 步**：typecheck → build → check-build → probe → 五套测试 → demo。它**不调用任何包管理器**，所以不会被 PATH 上那个会写 crashpad 日志并异常退出的 pnpm 干扰；任一步失败会以自己的输出退出，`npm publish` 会如实报出真正的原因。
+- **发布闸门挂在 `prepack` 上**（`pack` 与 `publish` 都会触发），由 [scripts/release-check.mjs](scripts/release-check.mjs) 用**纯 Node 顺序跑 14 步**：typecheck → build → build-client → check-build → release-notes → probe → 七套测试 → demo。它**不调用任何包管理器**，所以不会被 PATH 上那个会写 crashpad 日志并异常退出的 pnpm 干扰；任一步失败会以自己的输出退出，`npm publish` 会如实报出真正的原因。
 - 想单独跑闸门：`node scripts/release-check.mjs`；
-- `files` 只包含 `lib`、两份 patch、`README.md`——**`src` 与 `scripts` 不进包**（`lib` 由闸门里的 build 步骤保证是最新的）；
+- `files` 只包含 `lib`、两份 patch、`README.md`、`CHANGELOG.md`——**`src` 与 `scripts` 不进包**（`lib` 由闸门里的 build 步骤保证是最新的）；
 - 包名与 [cordis.patch.yml](cordis.patch.yml) 里的加载行 `name` **必须一致**，否则 profile 装了也解析不到。工作区根目录的 `rename-package.mjs` 会一次性同步所有出现位置并校验（含 YAML 引号，以及"目录名必须保持裸名"的断言）；
 - 版本按 semver：修 bug 走 patch，新增工具/命令走 minor，改配置语义走 major；
 - 首次发布后别人这样装：`dsh plugin --profile <名称> add @ray1270/dsh-task-stack`。
@@ -300,6 +300,7 @@ dsh-task-stack/
 ├── package.json              # dsh.bundle 声明；peerDependencies 声明宿主依赖
 ├── cordis.patch.yml          # bundle 加载行（包名，随安装生效）
 ├── dev.patch.yml             # 免安装 overlay（./lib/index.js，随 --patch 生效）
+├── CHANGELOG.md              # 每个版本一节：Release 正文的来源，也是发布闸门的一项
 ├── tsconfig.json
 ├── LICENSE                   # MIT
 ├── .github/workflows/ci.yml  # 每次 push 跑同一个发布闸门
@@ -312,7 +313,8 @@ dsh-task-stack/
 ├── client/
 │   └── client.js             # 浏览器半侧（手写 __ModuleLoader__ bundle，原样复制到 lib/）
 └── scripts/
-    ├── release-check.mjs     # 发布闸门：13 步顺序执行（CI 与 prepack 共用）
+    ├── release-check.mjs     # 发布闸门：14 步顺序执行（CI 与 prepack 共用）
+    ├── release-notes.mjs     # 从 CHANGELOG.md 取某版本的正文（Release 用）
     ├── build-client.mjs      # 复制客户端 bundle 并校验其形态
     ├── test-store.mjs        # 状态层 22 项
     ├── test-tools.mjs        # 工具层 18 项
@@ -332,7 +334,9 @@ dsh-task-stack/
 推一个 `v*` tag 就会自动发布到 npm 并建 GitHub Release（[.github/workflows/release.yml](.github/workflows/release.yml)）：
 
 ```powershell
-# 1) 升版本（改 package.json 的 version），确认闸门全绿
+# 1) 升版本（改 package.json 的 version），并给 CHANGELOG.md 写一节：
+#    ## 0.3.0 — YYYY-MM-DD
+#    闸门里的 release-notes 一步会检查这一节在不在
 pnpm release-check
 
 # 2) 提交并推 tag —— 这一步触发自动化，之后无需手工操作
@@ -341,7 +345,11 @@ git tag -a v0.3.0 -m "v0.3.0"
 git push && git push origin v0.3.0
 ```
 
-自动化做四件事：装依赖 → `node scripts/publish-release.mjs --tag $GITHUB_REF_NAME`（内部跑 `npm publish`，其 `prepack` 就是那套发布闸门）→ 产出 tarball → 建 Release 并附上该 tarball。
+自动化做五件事：装依赖 → `node scripts/publish-release.mjs --tag $GITHUB_REF_NAME`（内部跑 `npm publish`，其 `prepack` 就是那套发布闸门）→ 产出 tarball → 用 `scripts/release-notes.mjs` 取出 `CHANGELOG.md` 里这一版的正文 → 建 Release 并把正文和 tarball 都挂上。
+
+**Release 正文取自 `CHANGELOG.md`，不是自动生成的提交列表。** 自动生成那版（`generate_release_notes`）在 v0.3.0 上只剩一行 `Full Changelog`，看 release 页面的人根本不知道这一版加了侧栏面板、修了静默跳过。正文现在由 [scripts/release-notes.mjs](scripts/release-notes.mjs) 从 changelog 的对应小节取出；某个版本没有小节时会退化成标注清楚的提交摘要，页面不会空着。发布闸门里的 `release-notes` 一步则要求"当前版本有小节"，把这个问题挡在发版之前。
+
+已经发出去的版本号不能重发，所以改 changelog 之后要靠 [.github/workflows/sync-release-notes.yml](.github/workflows/sync-release-notes.yml) 更新既有 Release：`main` 上的 `CHANGELOG.md` 一改，它就把 `package.json` 当前版本对应的 Release 正文同步过去；对应 Release 不存在时安静退出，不会创建或删除任何东西。
 
 **认证走 trusted publishing（OIDC），不需要任何密钥**：工作流声明了 `id-token: write`，`npm publish` 会用 runner 签发的短期 OIDC token 换一个只在本次 job 内有效的发布凭据，并顺带附上 provenance 证明。没有长期 token，也就没有会过期的东西要换。
 

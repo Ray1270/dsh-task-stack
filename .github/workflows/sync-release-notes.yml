@@ -1,0 +1,45 @@
+# Keeps an already-published Release's body in sync with CHANGELOG.md.
+#
+# The tag workflow writes the Release body from the changelog at publish time. But
+# a body can only be fixed by editing the Release, never by re-publishing: a version
+# number is single-use on npm. v0.3.0 shipped that way — published with an empty
+# body, so the fix has to reach the existing page, not a new tag.
+#
+# Narrow by design: only the version currently in package.json, only when that
+# Release already exists. It never creates or deletes anything, and it exits 0
+# quietly when there is nothing to sync, so a changelog edit on `main` cannot fail
+# a build.
+name: Sync release notes
+
+on:
+  push:
+    branches: ['main']
+    paths: ['CHANGELOG.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The fallback summary in release-notes.mjs walks back to the previous tag.
+          fetch-depth: 0
+
+      - name: Update the Release for the current version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >/dev/null 2>&1; then
+            echo "no Release for $tag yet — nothing to sync"
+            exit 0
+          fi
+          node scripts/release-notes.mjs --tag "$tag" --out "$RUNNER_TEMP/notes.md"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "synced the $tag Release body from CHANGELOG.md"

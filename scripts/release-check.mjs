@@ -41,6 +41,10 @@ const steps = [
   { name: 'build', command: process.execPath, args: [tsc, '-p', 'tsconfig.json'] },
   { name: 'build-client', command: process.execPath, args: ['scripts/build-client.mjs'] },
   { name: 'check-build', command: process.execPath, args: ['scripts/check-build.mjs'] },
+  // A version without a CHANGELOG section publishes fine and then shows up on the
+  // release page as nothing but an auto-generated "Full Changelog" line — which is
+  // exactly how v0.3.0 first shipped. Refuse that here instead of after the fact.
+  { name: 'release-notes', command: process.execPath, args: ['scripts/release-notes.mjs', '--check'] },
   { name: 'probe', command: process.execPath, args: ['scripts/probe-load.mjs'] },
   { name: 'test:store', command: process.execPath, args: ['scripts/test-store.mjs'] },
   { name: 'test:tools', command: process.execPath, args: ['scripts/test-tools.mjs'] },

@@ -22,6 +22,7 @@
     "cordis.patch.yml",
     "dev.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {

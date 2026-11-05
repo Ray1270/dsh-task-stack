@@ -95,6 +95,15 @@ jobs:
         run: |
           node -e 'const fs=require("node:fs");const p=process.env.RUNNER_TEMP+"/publish.log";if(!fs.existsSync(p))process.exit(0);const t=fs.readFileSync(p,"utf8").trimEnd();const tail=t.slice(-700);console.log("::error title=publish-release::"+encodeURIComponent(tail));if(/OIDC permission denied/i.test(t))console.log("::error title=trusted publisher::The allowed actions for this trusted publisher do not include a direct npm publish (since 2026-09-03 a new connection allows staged publishing only). Tick \"npm publish\" under Allowed actions on npmjs.com; a connection whose fields are frozen has to be deleted and recreated.");'
 
+      - name: Compose the release body from CHANGELOG.md
+        # The section for this version is the body. `generate_release_notes` would
+        # list commits instead, which is how v0.3.0 first shipped with a page whose
+        # only content was "Full Changelog": the actual changes (a GUI panel, a
+        # silent-skip fix) were invisible. The script falls back to a labelled
+        # commit summary when a version has no section, so the page is never empty.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/release-notes.mjs --tag "$GITHUB_REF_NAME" --out "$RUNNER_TEMP/release-notes.md"
+
       - name: Create the GitHub Release
         # Only a real version tag may open a Release. Without this guard the
         # manual validation run would ask action-gh-release for tag `main`, which
@@ -105,7 +114,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-notes.md
           # The tarball `scripts/publish-release.mjs` packed (npm's own filename,
           # e.g. ray1270-dsh-task-stack-0.2.0.tgz), so a release page can be checked
           # against the registry without downloading from npm.
