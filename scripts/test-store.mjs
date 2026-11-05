@@ -41,7 +41,13 @@ await check('resolveStatePath joins cwd + stateDir + sessionId', () => {
 })
 
 await check('rejects an absolute stateDir', () => {
-  assert.throws(() => resolveStatePath(session, cwd, { ...config, stateDir: 'C:\\abs' }), RangeError)
+  // Each platform owns one form of "absolute": `C:\abs` is a legal *relative*
+  // name on Linux and `/abs` is a legal relative name on Windows, so hard-coding
+  // either one asserts something about the host rather than about the code (this
+  // passed on Windows and failed on the Linux runner). Ask the platform which
+  // form it rejects.
+  const absolute = process.platform === 'win32' ? 'C:\\abs' : '/abs'
+  assert.throws(() => resolveStatePath(session, cwd, { ...config, stateDir: absolute }), RangeError)
 })
 
 // --- push / pop round trip ---------------------------------------------------
